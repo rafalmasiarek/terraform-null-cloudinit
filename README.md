@@ -74,6 +74,27 @@ module "cloudinit" {
 }
 ```
 
+## systemd units
+
+```hcl
+module "cloudinit" {
+  source = "..."
+
+  systemd_units = [
+    {
+      name    = "secret-agent"
+      enabled = true
+      content = file("${path.module}/units/secret-agent.service")
+      dropins = {
+        "10-runtime.conf" = "[Service]\nRuntimeDirectory=secret-agent\n"
+      }
+    }
+  ]
+}
+```
+
+Unit files and drop-ins are written to `/etc/systemd/system` via `write_files` (0644, root:root, deferred); `systemctl daemon-reload` and `systemctl enable` run in `runcmd`, before `commands[]`. `enabled` requires an `[Install]` section. A path set in both `files` and `systemd_units` is a hard error.
+
 ## Frequency-scoped scripts
 
 ```hcl

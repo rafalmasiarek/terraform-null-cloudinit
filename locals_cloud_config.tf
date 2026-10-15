@@ -48,25 +48,72 @@ locals {
     ssh_authorized_keys = length(var.ssh_authorized_keys) > 0 ? var.ssh_authorized_keys : null
   }
 
+  # Systemd units: unit files + drop-ins via write_files (deferred to final
+  # stage); daemon-reload/enable in runcmd run after the files exist.
+  # Duplicate unit name+type errors at plan (duplicate key in the map below).
+  systemd_file_entries = flatten([
+    for u in var.systemd_units : concat(
+      [{
+        path    = "/etc/systemd/system/${u.name}.${u.type}"
+        content = u.content
+      }],
+      [for d in sort(keys(u.dropins)) : {
+        path    = "/etc/systemd/system/${u.name}.${u.type}.d/${d}"
+        content = u.dropins[d]
+      }],
+    )
+  ])
+
+  systemd_files = {
+    for e in local.systemd_file_entries : e.path => {
+      content     = e.content
+      owner       = "root:root"
+      permissions = "0644"
+      encoding    = "text/plain"
+      append      = false
+      defer       = true
+      source_uri  = null
+    }
+  }
+
+  # merge() silently lets the later argument win on duplicate keys, so the
+  # overlap is checked explicitly (same policy as cloud_config vs typed
+  # helpers): one mechanism per path.
+  systemd_files_conflict = setintersection(
+    toset(keys(local.systemd_files)),
+    toset(keys(var.files)),
+  )
+
+  files_all = merge(var.files, local.systemd_files)
+
   files_list = [
-    for path in sort(keys(var.files)) : merge(
+    for path in sort(keys(local.files_all)) : merge(
       { path = path },
       {
         for k, v in {
-          content     = var.files[path].content
-          owner       = var.files[path].owner
-          permissions = var.files[path].permissions
-          encoding    = var.files[path].encoding
-          append      = var.files[path].append
-          defer       = var.files[path].defer
+          content     = local.files_all[path].content
+          owner       = local.files_all[path].owner
+          permissions = local.files_all[path].permissions
+          encoding    = local.files_all[path].encoding
+          append      = local.files_all[path].append
+          defer       = local.files_all[path].defer
         } : k => v if v != null
       },
-      var.files[path].source_uri != null ? { source = { uri = var.files[path].source_uri } } : {},
+      local.files_all[path].source_uri != null ? { source = { uri = local.files_all[path].source_uri } } : {},
     )
   ]
   write_files_cfg = { write_files = length(local.files_list) > 0 ? local.files_list : null }
 
-  commands_cfg      = { runcmd = length(var.commands) > 0 ? var.commands : null }
+  # "--" keeps names starting with a hyphen from being parsed as options.
+  systemd_runcmd = length(var.systemd_units) == 0 ? [] : concat(
+    ["systemctl daemon-reload"],
+    [for u in var.systemd_units : "systemctl enable -- ${u.name}.${u.type}" if u.enabled],
+  )
+
+  # systemd daemon-reload/enable lines run before var.commands.
+  runcmd_all = concat(local.systemd_runcmd, var.commands)
+
+  commands_cfg      = { runcmd = length(local.runcmd_all) > 0 ? local.runcmd_all : null }
   boot_commands_cfg = { bootcmd = length(var.boot_commands) > 0 ? var.boot_commands : null }
 
   hostname_cfg = {
@@ -229,6 +276,10 @@ resource "terraform_data" "cloud_config_conflict_check" {
     precondition {
       condition     = length(local.cloud_config_overlap) == 0
       error_message = "cloud_config sets key(s) [${join(", ", local.cloud_config_overlap)}] that a typed helper variable also sets - pick one mechanism per key, don't set both."
+    }
+    precondition {
+      condition     = length(local.systemd_files_conflict) == 0
+      error_message = "files and systemd_units both define file(s) [${join(", ", local.systemd_files_conflict)}] - pick one mechanism per path."
     }
   }
 }
