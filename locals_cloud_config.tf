@@ -104,9 +104,10 @@ locals {
   ]
   write_files_cfg = { write_files = length(local.files_list) > 0 ? local.files_list : null }
 
+  # "--" keeps names starting with a hyphen from being parsed as options.
   systemd_runcmd = length(var.systemd_units) == 0 ? [] : concat(
     ["systemctl daemon-reload"],
-    [for u in var.systemd_units : "systemctl enable ${u.name}.${u.type}" if u.enabled],
+    [for u in var.systemd_units : "systemctl enable -- ${u.name}.${u.type}" if u.enabled],
   )
 
   # systemd daemon-reload/enable lines run before var.commands.

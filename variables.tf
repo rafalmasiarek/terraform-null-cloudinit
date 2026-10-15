@@ -130,17 +130,22 @@ variable "systemd_units" {
   }))
   default = []
 
+  # No "/": the unit file path is built by concatenation, so a path
+  # separator would escape /etc/systemd/system (and bypass the
+  # files-overlap check).
   validation {
-    condition     = alltrue([for u in var.systemd_units : can(regex("^[a-zA-Z0-9:_.@/-]+$", u.name))])
-    error_message = "systemd_units[].name must be a systemd unit name ([a-zA-Z0-9:_.@/-]+)."
+    condition     = alltrue([for u in var.systemd_units : can(regex("^[a-zA-Z0-9:_.@-]+$", u.name))])
+    error_message = "systemd_units[].name must be a systemd unit name ([a-zA-Z0-9:_.@-]+); path separators are not allowed."
   }
   validation {
     condition     = alltrue([for u in var.systemd_units : contains(["service", "socket", "target", "timer", "path", "device", "swap", "mount", "automount", "scope", "slice"], u.type)])
     error_message = "systemd_units[].type must be one of: service, socket, target, timer, path, device, swap, mount, automount, scope, slice."
   }
+  # systemd only reads *.conf inside the .d directory - anything else is
+  # written but silently ignored.
   validation {
-    condition     = alltrue([for u in var.systemd_units : trimspace(u.content) != "" && alltrue([for d in keys(u.dropins) : can(regex("^[A-Za-z0-9._-]+$", d))])])
-    error_message = "systemd_units[].content must be non-empty; dropin file names must match [A-Za-z0-9._-]+."
+    condition     = alltrue([for u in var.systemd_units : trimspace(u.content) != "" && alltrue([for d in keys(u.dropins) : can(regex("^[A-Za-z0-9._-]+\\.conf$", d))])])
+    error_message = "systemd_units[].content must be non-empty; dropin file names must end in .conf ([A-Za-z0-9._-]+.conf)."
   }
 }
 
