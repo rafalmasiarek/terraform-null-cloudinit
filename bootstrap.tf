@@ -75,24 +75,25 @@ locals {
     "fi",
   ]
 
+  # Shell arguments are single-quoted (embedded quotes escaped as '\''); execution_steps[].command is trusted and left unquoted.
   ansible_playbook_lines = flatten([
     for p in var.ansible_playbooks : [
       join(" ", concat(
         ["ansible-playbook"],
-        ["-i", "\"${p.inventory}\""],
-        ["-c", p.connection],
+        ["-i", "'${replace(p.inventory, "'", "'\\''")}'"],
+        ["-c", "'${replace(p.connection, "'", "'\\''")}'"],
         p.become ? ["-b"] : [],
-        length(p.tags) > 0 ? ["--tags", "\"${join(",", p.tags)}\""] : [],
-        length(p.extra_vars) > 0 ? ["--extra-vars", "\"${join(" ", [for k, v in p.extra_vars : "${k}=${v}"])}\""] : [],
-        ["\"${p.path}\""],
+        length(p.tags) > 0 ? ["--tags", "'${replace(join(",", p.tags), "'", "'\\''")}'"] : [],
+        length(p.extra_vars) > 0 ? ["--extra-vars", "'${replace(join(" ", [for k, v in p.extra_vars : "${k}=${v}"]), "'", "'\\''")}'"] : [],
+        ["'${replace(p.path, "'", "'\\''")}'"],
       ))
     ]
   ])
 
   execution_step_lines = flatten([
     for s in var.execution_steps : concat(
-      s.cwd != null ? ["cd \"${s.cwd}\""] : [],
-      [join(" ", concat([for k, v in s.env : "${k}=\"${v}\""], [s.command]))],
+      s.cwd != null ? ["cd '${replace(s.cwd, "'", "'\\''")}'"] : [],
+      [join(" ", concat([for k, v in s.env : "${k}='${replace(v, "'", "'\\''")}'"], [s.command]))],
     )
   ])
 

@@ -377,6 +377,11 @@ variable "ansible_playbooks" {
     become     = optional(bool, true)
   }))
   default = []
+
+  validation {
+    condition     = alltrue([for p in var.ansible_playbooks : trimspace(p.connection) != "" && !can(regex("[\\x00-\\x1f]", p.connection))])
+    error_message = "ansible_playbooks[].connection must be non-empty and contain no control characters. Any Ansible connection plugin name (including collection names like community.docker.docker) is allowed; the value is shell-quoted."
+  }
 }
 
 variable "ansible_core_install" {
@@ -393,4 +398,9 @@ variable "execution_steps" {
     env     = optional(map(string), {})
   }))
   default = []
+
+  validation {
+    condition     = alltrue([for s in var.execution_steps : alltrue([for k in keys(s.env) : can(regex("^[A-Za-z_][A-Za-z0-9_]*$", k))])])
+    error_message = "execution_steps[].env keys must be valid shell variable names ([A-Za-z_][A-Za-z0-9_]*). command is trusted shell and is not quoted."
+  }
 }
