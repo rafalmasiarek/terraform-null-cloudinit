@@ -24,6 +24,11 @@ output "generated_cloud_config" {
   sensitive   = true
 }
 
+output "secrets_service" {
+  description = "Name of the generated oneshot service that materializes secrets[] at boot - order consumers with After=/Requires=. Null if secrets is empty."
+  value       = local.secrets_active ? local.secrets_service : null
+}
+
 output "required_permissions" {
   description = "Per-provider permission requirements for whatever artifacts[] sources are configured, keyed by provider - each null if that provider's scheme isn't used. This module never creates or attaches any of these; wire them into whatever identity the compute actually runs as (AWS IAM role, GCP service account, Azure Managed Identity)."
   value = {

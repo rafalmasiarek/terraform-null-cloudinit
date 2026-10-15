@@ -95,6 +95,30 @@ module "cloudinit" {
 
 Unit files and drop-ins are written to `/etc/systemd/system` via `write_files` (0644, root:root, deferred); `systemctl daemon-reload` and `systemctl enable` run in `runcmd`, before `commands[]`. `enabled` requires an `[Install]` section. A path set in both `files` and `systemd_units` is a hard error.
 
+## Runtime secrets
+
+```hcl
+module "cloudinit" {
+  source = "..."
+
+  secrets = [
+    {
+      name        = "db-password"
+      destination = "/run/secrets/db-password"
+      command     = "aws secretsmanager get-secret-value --secret-id prod/db --query SecretString --output text"
+    },
+    {
+      name        = "tls-key"
+      destination = "/etc/tls/key.pem"
+      source_path = "/opt/bootstrap/tls-key.pem"
+      owner       = "app:app"
+    },
+  ]
+}
+```
+
+A generated oneshot service (name in `secrets_service`, enabled at boot) materializes each entry: `source_path` copies a file already on the instance (e.g. fetched by `artifacts`), `command` writes its stdout. Only the path/command enters user-data, never the value.
+
 ## Frequency-scoped scripts
 
 ```hcl

@@ -51,24 +51,83 @@ locals {
   # Systemd units: unit files + drop-ins via write_files (deferred to final
   # stage); daemon-reload/enable in runcmd run after the files exist.
   # Duplicate unit name+type errors at plan (duplicate key in the map below).
-  systemd_file_entries = flatten([
-    for u in var.systemd_units : concat(
-      [{
-        path    = "/etc/systemd/system/${u.name}.${u.type}"
-        content = u.content
-      }],
-      [for d in sort(keys(u.dropins)) : {
-        path    = "/etc/systemd/system/${u.name}.${u.type}.d/${d}"
-        content = u.dropins[d]
-      }],
+
+  # Runtime secrets (secrets variable): a generated oneshot service
+  # materializes each entry at boot from a file already on the instance or
+  # from a command's stdout - the values themselves never enter user-data or
+  # state. The script is a 0700 file, not a unit ExecStart, so caller values
+  # stay single-quoted in one shell layer (no nested systemd/shell quoting).
+  secrets_active  = length(var.secrets) > 0
+  secrets_service = "terraform-cloudinit-secrets.service"
+  secrets_script  = "/usr/local/bin/terraform-cloudinit-secrets"
+
+  secrets_script_lines = flatten([
+    for s in var.secrets : concat(
+      ["# secret: ${s.name}", "d=$(dirname ${local.shell_q[s.destination]})", "mkdir -p \"$d\""],
+      s.command != null ? [
+        "umask 077",
+        "${s.command} > \"$d/.${s.name}.tmp\"",
+        "install -m ${local.shell_q[s.permissions]} \"$d/.${s.name}.tmp\" ${local.shell_q[s.destination]}",
+        ] : [
+        "install -m ${local.shell_q[s.permissions]} ${local.shell_q[s.source_path]} ${local.shell_q[s.destination]}",
+      ],
+      s.owner != null ? ["chown ${local.shell_q[s.owner]} ${local.shell_q[s.destination]}"] : [],
+      s.command != null ? ["rm -f \"$d/.${s.name}.tmp\""] : [],
     )
   ])
+
+  secrets_script_content = local.secrets_active ? "#!/bin/sh\nset -eu\n" + join("\n", local.secrets_script_lines) + "\n" : null
+
+  secrets_unit_content = local.secrets_active ? join("\n", [
+    "[Unit]",
+    "Description=Materialize runtime secrets (terraform-null-cloudinit)",
+    "",
+    "[Service]",
+    "Type=oneshot",
+    "RemainAfterExit=yes",
+    "ExecStart=${local.secrets_script}",
+    "",
+    "[Install]",
+    "WantedBy=multi-user.target",
+    "",
+  ]) : null
+
+  secrets_file_entries = local.secrets_active ? [
+    {
+      path        = local.secrets_script
+      content     = local.secrets_script_content
+      permissions = "0700"
+    },
+    {
+      path        = "/etc/systemd/system/${local.secrets_service}"
+      content     = local.secrets_unit_content
+      permissions = "0644"
+    },
+  ] : []
+
+  systemd_file_entries = concat(
+    flatten([
+      for u in var.systemd_units : concat(
+        [{
+          path        = "/etc/systemd/system/${u.name}.${u.type}"
+          content     = u.content
+          permissions = "0644"
+        }],
+        [for d in sort(keys(u.dropins)) : {
+          path        = "/etc/systemd/system/${u.name}.${u.type}.d/${d}"
+          content     = u.dropins[d]
+          permissions = "0644"
+        }],
+      )
+    ]),
+    local.secrets_file_entries,
+  )
 
   systemd_files = {
     for e in local.systemd_file_entries : e.path => {
       content     = e.content
       owner       = "root:root"
-      permissions = "0644"
+      permissions = e.permissions
       encoding    = "text/plain"
       append      = false
       defer       = true
@@ -105,9 +164,10 @@ locals {
   write_files_cfg = { write_files = length(local.files_list) > 0 ? local.files_list : null }
 
   # "--" keeps names starting with a hyphen from being parsed as options.
-  systemd_runcmd = length(var.systemd_units) == 0 ? [] : concat(
+  systemd_runcmd = (length(var.systemd_units) == 0 && !local.secrets_active) ? [] : concat(
     ["systemctl daemon-reload"],
     [for u in var.systemd_units : "systemctl enable -- ${u.name}.${u.type}" if u.enabled],
+    local.secrets_active ? ["systemctl enable -- ${local.secrets_service}"] : [],
   )
 
   # systemd daemon-reload/enable lines run before var.commands.
