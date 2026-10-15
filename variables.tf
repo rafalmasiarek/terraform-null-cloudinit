@@ -98,9 +98,9 @@ variable "groups" {
 }
 
 variable "ssh_authorized_keys" {
-  description = "Maps to the top-level ssh_authorized_keys key (map of username to list of keys) - distinct from a users[] entry's own ssh_authorized_keys field. Use this for adding keys to a user this module isn't also creating (e.g. the AMI's default user)."
-  type        = map(list(string))
-  default     = {}
+  description = "Top-level ssh_authorized_keys - a list of public keys."
+  type        = list(string)
+  default     = []
 }
 
 # --- Files ---
