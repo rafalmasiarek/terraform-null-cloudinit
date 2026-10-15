@@ -35,7 +35,7 @@ locals {
           homedir             = u.homedir
           no_create_home      = u.no_create_home
           expiredate          = u.expiredate
-          selinux             = u.selinux
+          selinux_user        = u.selinux_user
         } : k => v if v != null
       },
       u.extra,
