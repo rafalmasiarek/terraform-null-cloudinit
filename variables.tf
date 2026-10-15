@@ -70,7 +70,7 @@ variable "packages" {
   # error probe: element([for _ in [1] : 1 if COND], 0) errors when COND is
   # false. Same idiom in the commands/boot_commands/disk_setup validations.
   validation {
-    condition     = var.packages == null ? true : (can(keys(var.packages.install)) == false && try(alltrue([for e in var.packages.install : (can(element([for _ in [1] : 1 if length(e) > 0 && length(trimspace(e)) > 0], 0)) || can(tolist(e)) && can(element([for _ in [1] : 1 if length(tolist(e)) == 2], 0)) && can(element([for _ in [1] : 1 if alltrue([for v in tolist(e) : can(element([for _ in [1] : 1 if length(v) > 0 && length(trimspace(v)) > 0], 0))])], 0)) || can(keys(e)) && can(element([for _ in [1] : 1 if length([for k in keys(e) : 1 if length(k) == 0]) == 0], 0)) && can(element([for _ in [1] : 1 if alltrue([for v in values(e) : can(tolist(v)) && can(element([for _ in [1] : 1 if length([for x in tolist(v) : 1 if !can(length(x)) || length(trimspace(x)) == 0]) == 0], 0))])], 0)))]), false))
+    condition     = var.packages == null ? true : (can(flatten(var.packages.install)) && try(alltrue([for e in var.packages.install : (can(element([for _ in [1] : 1 if length(e) > 0 && length(trimspace(e)) > 0], 0)) || can(flatten(e)) && can(element([for _ in [1] : 1 if length(e) == 2], 0)) && can(element([for _ in [1] : 1 if alltrue([for v in e : can(element([for _ in [1] : 1 if length(v) > 0 && length(trimspace(v)) > 0], 0))])], 0)) || can(keys(e)) && can(element([for _ in [1] : 1 if length([for k in keys(e) : 1 if length(k) == 0]) == 0], 0)) && can(element([for _ in [1] : 1 if alltrue([for v in values(e) : can(flatten(v)) && can(element([for _ in [1] : 1 if alltrue([for x in v : can(element([for _ in [1] : 1 if length(x) > 0 && length(trimspace(x)) > 0], 0))])], 0))])], 0)))]), false))
     error_message = "packages.install entries must be a package name (string), a [name, version] pair, or a manager-scoped map of package names (e.g. { apt = [\"curl\"] })."
   }
 }
@@ -205,7 +205,7 @@ variable "commands" {
   # Terraform cannot type the string | list(string) union, so the shape is
   # enforced here instead.
   validation {
-    condition     = (can(keys(var.commands)) == false && try(alltrue([for c in var.commands : (can(element([for _ in [1] : 1 if length(c) > 0 && length(trimspace(c)) > 0], 0)) || can(tolist(c)) && can(element([for _ in [1] : 1 if length(tolist(c)) > 0], 0)) && can(element([for _ in [1] : 1 if alltrue([for v in tolist(c) : can(element([for _ in [1] : 1 if length(v) > 0 && length(trimspace(v)) > 0], 0))])], 0)))]), false))
+    condition     = (can(flatten(var.commands)) && try(alltrue([for c in var.commands : (can(element([for _ in [1] : 1 if length(c) > 0 && length(trimspace(c)) > 0], 0)) || can(flatten(c)) && can(element([for _ in [1] : 1 if length(c) > 0], 0)) && can(element([for _ in [1] : 1 if alltrue([for v in c : can(element([for _ in [1] : 1 if length(v) > 0 && length(trimspace(v)) > 0], 0))])], 0)))]), false))
     error_message = "commands[] entries must be a non-empty shell string or a list of non-empty strings (argv form)."
   }
 }
@@ -216,7 +216,7 @@ variable "boot_commands" {
   default     = []
 
   validation {
-    condition     = (can(keys(var.boot_commands)) == false && try(alltrue([for c in var.boot_commands : (can(element([for _ in [1] : 1 if length(c) > 0 && length(trimspace(c)) > 0], 0)) || can(tolist(c)) && can(element([for _ in [1] : 1 if length(tolist(c)) > 0], 0)) && can(element([for _ in [1] : 1 if alltrue([for v in tolist(c) : can(element([for _ in [1] : 1 if length(v) > 0 && length(trimspace(v)) > 0], 0))])], 0)))]), false))
+    condition     = (can(flatten(var.boot_commands)) && try(alltrue([for c in var.boot_commands : (can(element([for _ in [1] : 1 if length(c) > 0 && length(trimspace(c)) > 0], 0)) || can(flatten(c)) && can(element([for _ in [1] : 1 if length(c) > 0], 0)) && can(element([for _ in [1] : 1 if alltrue([for v in c : can(element([for _ in [1] : 1 if length(v) > 0 && length(trimspace(v)) > 0], 0))])], 0)))]), false))
     error_message = "boot_commands[] entries must be a non-empty shell string or a list of non-empty strings (argv form)."
   }
 }
@@ -292,7 +292,7 @@ variable "disk_setup" {
   default = {}
 
   validation {
-    condition     = alltrue([for dev, d in var.disk_setup : (can(element([for _ in [1] : 1 if d.layout == true || d.layout == false], 0)) || can(element([for _ in [1] : 1 if d.layout == "remove"], 0)) || (can(element(d.layout, 0)) && can(keys(d.layout)) == false && can(element([for _ in [1] : 1 if alltrue([for p in d.layout : (can(upper(p)) || (can(keys(p)) == false && can(element([for _ in [1] : 1 if length(p) == 2], 0)) && can(element([for _ in [1] : 1 if alltrue([for v in p : can(upper(v))])], 0))))])], 0))))])
+    condition     = alltrue([for dev, d in var.disk_setup : (can(element([for _ in [1] : 1 if d.layout == true || d.layout == false], 0)) || can(element([for _ in [1] : 1 if d.layout == "remove"], 0)) || (can(flatten(d.layout)) && can(element([for _ in [1] : 1 if length(d.layout) > 0], 0)) && can(element([for _ in [1] : 1 if alltrue([for p in d.layout : (can(element([for _ in [1] : 1 if p >= 0], 0)) || (can(keys(p)) == false && can(flatten(p)) && can(element([for _ in [1] : 1 if length(p) == 2], 0)) && can(element([for _ in [1] : 1 if element(p, 0) >= 0], 0)) && (can(element([for _ in [1] : 1 if element(p, 1) >= 0], 0)) || can(element([for _ in [1] : 1 if length(element(p, 1)) > 0 && length(trimspace(element(p, 1))) > 0], 0)))))])], 0))))])
     error_message = "disk_setup layout must be a boolean, \"remove\", or a non-empty list of partition specs (a percentage, or a [percentage, type] pair)."
   }
 }

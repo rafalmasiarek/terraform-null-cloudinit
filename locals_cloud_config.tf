@@ -8,7 +8,7 @@ locals {
   # merged result.
 
   packages_cfg = {
-    packages                   = var.packages != null && length(var.packages.install) > 0 ? var.packages.install : null
+    packages                   = var.packages != null && length(var.packages.install) > 0 ? [for p in var.packages.install : p] : null
     package_update             = var.packages != null ? var.packages.update : null
     package_upgrade            = var.packages != null ? var.packages.upgrade : null
     package_reboot_if_required = var.packages != null ? var.packages.reboot_if_required : null
@@ -172,10 +172,10 @@ locals {
   )
 
   # systemd daemon-reload/enable lines run before var.commands.
-  runcmd_all = concat(local.systemd_runcmd, var.commands)
+  runcmd_all = concat(local.systemd_runcmd, [for c in var.commands : c])
 
   commands_cfg      = { runcmd = length(local.runcmd_all) > 0 ? local.runcmd_all : null }
-  boot_commands_cfg = { bootcmd = length(var.boot_commands) > 0 ? var.boot_commands : null }
+  boot_commands_cfg = { bootcmd = length(var.boot_commands) > 0 ? [for c in var.boot_commands : c] : null }
 
   hostname_cfg = {
     hostname          = var.hostname
