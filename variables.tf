@@ -56,12 +56,23 @@ variable "scripts" {
 variable "packages" {
   description = "Maps to cc_package_update_upgrade_install. install: plain names, [name, version] pairs, or manager-scoped {apt = [...], snap = [...]}. update/upgrade default false (never forced silently)."
   type = object({
-    install            = optional(list(any), [])
+    install            = optional(any, [])
     update             = optional(bool, false)
     upgrade            = optional(bool, false)
     reboot_if_required = optional(bool, false)
   })
   default = null
+
+  # Each install entry is one of: a package name (string), a [name, version]
+  # pair (2-element string list), or a manager-scoped map of package names.
+  # Terraform cannot type the union, so the shape is enforced here. can()
+  # only reports "evaluates without error", so every predicate below is an
+  # error probe: element([for _ in [1] : 1 if COND], 0) errors when COND is
+  # false. Same idiom in the commands/boot_commands/disk_setup validations.
+  validation {
+    condition     = var.packages == null ? true : (can(flatten(var.packages.install)) && try(alltrue([for e in var.packages.install : (can(element([for _ in [1] : 1 if length(e) > 0 && length(trimspace(e)) > 0], 0)) || can(flatten(e)) && can(element([for _ in [1] : 1 if length(e) == 2], 0)) && can(element([for _ in [1] : 1 if alltrue([for v in e : can(element([for _ in [1] : 1 if length(v) > 0 && length(trimspace(v)) > 0], 0))])], 0)) || can(keys(e)) && can(element([for _ in [1] : 1 if length([for k in keys(e) : 1 if length(k) == 0]) == 0], 0)) && can(element([for _ in [1] : 1 if alltrue([for v in values(e) : can(flatten(v)) && can(element([for _ in [1] : 1 if alltrue([for x in v : can(element([for _ in [1] : 1 if length(x) > 0 && length(trimspace(x)) > 0], 0))])], 0))])], 0)))]), false))
+    error_message = "packages.install entries must be a package name (string), a [name, version] pair, or a manager-scoped map of package names (e.g. { apt = [\"curl\"] })."
+  }
 }
 
 # --- Users and groups ---
@@ -86,6 +97,7 @@ variable "users" {
     homedir             = optional(string)
     no_create_home      = optional(bool, false)
     expiredate          = optional(string)
+    selinux_user        = optional(string)
     extra               = optional(any, {})
   }))
   default = null
@@ -187,14 +199,26 @@ variable "secrets" {
 
 variable "commands" {
   description = "Maps to runcmd - runs once per instance, late in boot (Final stage), after packages/users/write_files. Each entry is a shell string or an argv-style list."
-  type        = list(any)
+  type        = any
   default     = []
+
+  # Terraform cannot type the string | list(string) union, so the shape is
+  # enforced here instead.
+  validation {
+    condition     = (can(flatten(var.commands)) && try(alltrue([for c in var.commands : (can(element([for _ in [1] : 1 if length(c) > 0 && length(trimspace(c)) > 0], 0)) || can(flatten(c)) && can(element([for _ in [1] : 1 if length(c) > 0], 0)) && can(element([for _ in [1] : 1 if alltrue([for v in c : can(element([for _ in [1] : 1 if length(v) > 0 && length(trimspace(v)) > 0], 0))])], 0)))]), false))
+    error_message = "commands[] entries must be a non-empty shell string or a list of non-empty strings (argv form)."
+  }
 }
 
 variable "boot_commands" {
   description = "Maps to bootcmd - runs every boot, early (Network stage). Must be idempotent - cloud-init does not enforce this, it's the caller's responsibility."
-  type        = list(any)
+  type        = any
   default     = []
+
+  validation {
+    condition     = (can(flatten(var.boot_commands)) && try(alltrue([for c in var.boot_commands : (can(element([for _ in [1] : 1 if length(c) > 0 && length(trimspace(c)) > 0], 0)) || can(flatten(c)) && can(element([for _ in [1] : 1 if length(c) > 0], 0)) && can(element([for _ in [1] : 1 if alltrue([for v in c : can(element([for _ in [1] : 1 if length(v) > 0 && length(trimspace(v)) > 0], 0))])], 0)))]), false))
+    error_message = "boot_commands[] entries must be a non-empty shell string or a list of non-empty strings (argv form)."
+  }
 }
 
 # --- Hostname / timezone ---
@@ -251,6 +275,11 @@ variable "resize_rootfs" {
   description = "true, false, or \"noblock\" (resize in the background instead of blocking boot)."
   type        = string
   default     = null
+
+  validation {
+    condition     = try(contains(["true", "false", "noblock"], var.resize_rootfs), true)
+    error_message = "resize_rootfs must be \"true\", \"false\", or \"noblock\"."
+  }
 }
 
 variable "disk_setup" {
@@ -261,6 +290,11 @@ variable "disk_setup" {
     overwrite  = optional(bool, false)
   }))
   default = {}
+
+  validation {
+    condition     = alltrue([for dev, d in var.disk_setup : (can(element([for _ in [1] : 1 if d.layout == true || d.layout == false], 0)) || can(element([for _ in [1] : 1 if d.layout == "remove"], 0)) || (can(flatten(d.layout)) && can(element([for _ in [1] : 1 if length(d.layout) > 0], 0)) && can(element([for _ in [1] : 1 if alltrue([for p in d.layout : (can(element([for _ in [1] : 1 if p >= 0], 0)) || (can(keys(p)) == false && can(flatten(p)) && can(element([for _ in [1] : 1 if length(p) == 2], 0)) && can(element([for _ in [1] : 1 if element(p, 0) >= 0], 0)) && (can(element([for _ in [1] : 1 if element(p, 1) >= 0], 0)) || can(element([for _ in [1] : 1 if length(element(p, 1)) > 0 && length(trimspace(element(p, 1))) > 0], 0)))))])], 0))))])
+    error_message = "disk_setup layout must be a boolean, \"remove\", or a non-empty list of partition specs (a percentage, or a [percentage, type] pair)."
+  }
 }
 
 variable "fs_setup" {
