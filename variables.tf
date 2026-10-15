@@ -62,6 +62,14 @@ variable "packages" {
     reboot_if_required = optional(bool, false)
   })
   default = null
+
+  # Each install entry is one of: a package name (string), a [name, version]
+  # pair (2-element string list), or a manager-scoped map of package names.
+  # Terraform cannot type the union, so the shape is enforced here.
+  validation {
+    condition     = var.packages == null || alltrue([for e in var.packages.install : can(upper(e)) || (can(length(tolist(e)) == 2) && can(alltrue([for v in tolist(e) : can(upper(v))]))) || (can(alltrue([for k, v in e : can(upper(k))])) && can(alltrue([for k, v in e : can(alltrue([for x in tolist(v) : can(upper(x))]))])))])
+    error_message = "packages.install entries must be a package name (string), a [name, version] pair, or a manager-scoped map of package names (e.g. { apt = [\"curl\"] })."
+  }
 }
 
 # --- Users and groups ---
@@ -86,6 +94,7 @@ variable "users" {
     homedir             = optional(string)
     no_create_home      = optional(bool, false)
     expiredate          = optional(string)
+    selinux             = optional(string)
     extra               = optional(any, {})
   }))
   default = null
@@ -189,12 +198,24 @@ variable "commands" {
   description = "Maps to runcmd - runs once per instance, late in boot (Final stage), after packages/users/write_files. Each entry is a shell string or an argv-style list."
   type        = list(any)
   default     = []
+
+  # Terraform cannot type the string | list(string) union, so the shape is
+  # enforced here instead.
+  validation {
+    condition     = alltrue([for c in var.commands : (can(upper(c)) && can(trimspace(c) != "")) || (can(tolist(c)) && can(length(tolist(c)) > 0) && can(alltrue([for x in tolist(c) : can(upper(x)) && can(trimspace(x) != "")])))])
+    error_message = "commands[] entries must be a non-empty shell string or a list of non-empty strings (argv form)."
+  }
 }
 
 variable "boot_commands" {
   description = "Maps to bootcmd - runs every boot, early (Network stage). Must be idempotent - cloud-init does not enforce this, it's the caller's responsibility."
   type        = list(any)
   default     = []
+
+  validation {
+    condition     = alltrue([for c in var.boot_commands : (can(upper(c)) && can(trimspace(c) != "")) || (can(tolist(c)) && can(length(tolist(c)) > 0) && can(alltrue([for x in tolist(c) : can(upper(x)) && can(trimspace(x) != "")])))])
+    error_message = "boot_commands[] entries must be a non-empty shell string or a list of non-empty strings (argv form)."
+  }
 }
 
 # --- Hostname / timezone ---
@@ -251,6 +272,11 @@ variable "resize_rootfs" {
   description = "true, false, or \"noblock\" (resize in the background instead of blocking boot)."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.resize_rootfs == null || contains(["true", "false", "noblock"], var.resize_rootfs)
+    error_message = "resize_rootfs must be \"true\", \"false\", or \"noblock\"."
+  }
 }
 
 variable "disk_setup" {
@@ -261,6 +287,11 @@ variable "disk_setup" {
     overwrite  = optional(bool, false)
   }))
   default = {}
+
+  validation {
+    condition     = alltrue([for dev, d in var.disk_setup : can(d.layout == true) || can(d.layout == false) || can(keys(d.layout))])
+    error_message = "disk_setup layout must be a boolean or an object of partition specs."
+  }
 }
 
 variable "fs_setup" {
