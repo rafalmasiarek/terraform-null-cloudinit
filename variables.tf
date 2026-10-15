@@ -149,6 +149,40 @@ variable "systemd_units" {
   }
 }
 
+variable "secrets" {
+  description = "Files materialized at boot by a generated oneshot service (name in the secrets_service output) - secret values never enter user-data or state, only the path or command that produces them. Exactly one of source_path (copy a file already on the instance) or command (its stdout becomes the content, e.g. a secrets-manager CLI call)."
+  type = list(object({
+    name        = string
+    destination = string
+    source_path = optional(string)
+    command     = optional(string)
+    owner       = optional(string)
+    permissions = optional(string, "0600")
+  }))
+  default = []
+
+  validation {
+    condition     = alltrue([for s in var.secrets : can(regex("^[A-Za-z0-9._-]+$", s.name))])
+    error_message = "secrets[].name must match [A-Za-z0-9._-]+."
+  }
+  validation {
+    condition     = alltrue([for s in var.secrets : trimspace(s.destination) != "" && startswith(s.destination, "/") && !endswith(s.destination, "/")])
+    error_message = "secrets[].destination must be an absolute file path."
+  }
+  validation {
+    condition     = alltrue([for s in var.secrets : (s.source_path == null) != (s.command == null)])
+    error_message = "secrets[] requires exactly one of source_path or command."
+  }
+  validation {
+    condition     = alltrue([for s in var.secrets : s.owner == null || can(regex("^[a-zA-Z0-9._-]+(:[a-zA-Z0-9._-]+)?$", s.owner))])
+    error_message = "secrets[].owner must be a POSIX user[:group] name ([a-zA-Z0-9._-]+(:[a-zA-Z0-9._-]+)?)."
+  }
+  validation {
+    condition     = alltrue([for s in var.secrets : can(regex("^[0-7]{3,4}$", s.permissions))])
+    error_message = "secrets[].permissions must be an octal mode, e.g. 0600."
+  }
+}
+
 # --- Commands ---
 
 variable "commands" {

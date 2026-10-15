@@ -24,6 +24,7 @@ locals {
     [for p in var.ansible_playbooks : join(" ", [for k, v in p.extra_vars : "${k}=${v}"]) if length(p.extra_vars) > 0],
     [for s in var.execution_steps : [for v in [s.cwd] : v if v != null]],
     [for s in var.execution_steps : values(s.env)],
+    [for s in var.secrets : [for v in [s.destination, s.source_path, s.owner, s.permissions] : v if v != null]],
   ]))
 
   shell_q = {
