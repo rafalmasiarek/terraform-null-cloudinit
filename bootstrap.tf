@@ -1,7 +1,34 @@
 locals {
+  # Shell-quoting (issue #1): every caller-controlled value spliced into the
+  # generated bootstrap script is single-quoted via local.shell_q - inside
+  # single quotes no character ($, `, \, ", ') can alter command structure.
+  # Deliberately unquoted: execution_steps[].command and the raw script
+  # variables - shell source by contract.
+
   s3_artifacts     = [for a in var.artifacts : a if startswith(a.source, "s3://")]
   gs_artifacts     = [for a in var.artifacts : a if startswith(a.source, "gs://")]
   azblob_artifacts = [for a in var.artifacts : a if startswith(a.source, "azblob://")]
+
+  azblob_parts_by_source = {
+    for a in local.azblob_artifacts : a.source => regex("^azblob://([^/]+)/([^/]+)/(.+)$", a.source)
+  }
+
+  # All values the bootstrap script interpolates, deduplicated - the
+  # single-quoted form of each is precomputed in local.shell_q (lookup, not a
+  # function call; Terraform has no user-defined functions).
+  shell_quote_candidates = toset(flatten([
+    [for a in var.artifacts : [for v in [a.source, a.destination, a.owner, a.permissions, a.sha256, a.region, a.endpoint_url, a.extract_to] : v if v != null]],
+    [for src, parts in local.azblob_parts_by_source : parts],
+    [for p in var.ansible_playbooks : [p.path, p.inventory, p.connection]],
+    [for p in var.ansible_playbooks : join(",", p.tags) if length(p.tags) > 0],
+    [for p in var.ansible_playbooks : join(" ", [for k, v in p.extra_vars : "${k}=${v}"]) if length(p.extra_vars) > 0],
+    [for s in var.execution_steps : [for v in [s.cwd] : v if v != null]],
+    [for s in var.execution_steps : values(s.env)],
+  ]))
+
+  shell_q = {
+    for v in local.shell_quote_candidates : v => "'${replace(v, "'", "'\\''")}'"
+  }
 
   # awscli ships in every mainstream distro's default package repo - a
   # simple conditional install is reliable. gcloud/az do not (they need a
@@ -33,10 +60,6 @@ locals {
 
   cli_bootstrap = concat(local.aws_cli_bootstrap, local.gcloud_check, local.az_cli_check)
 
-  azblob_parts_by_source = {
-    for a in local.azblob_artifacts : a.source => regex("^azblob://([^/]+)/([^/]+)/(.+)$", a.source)
-  }
-
   # One ordered list of shell lines per artifact - fetch (S3/GCS/Azure Blob
   # via the compute's own attached identity, or HTTPS), verify, own, chmod,
   # optionally extract. Never a static credential in any of these - AWS IAM
@@ -44,23 +67,23 @@ locals {
   # each picked up automatically by their respective CLI.
   artifact_lines = flatten([
     for a in var.artifacts : concat(
-      ["mkdir -p \"$(dirname \"${a.destination}\")\""],
+      ["mkdir -p \"$(dirname ${local.shell_q[a.destination]})\""],
       startswith(a.source, "s3://") ? [
-        "aws s3 cp ${a.endpoint_url != null ? "--endpoint-url ${a.endpoint_url} " : ""}${a.region != null ? "--region ${a.region} " : ""}\"${a.source}\" \"${a.destination}\""
+        "aws s3 cp ${a.endpoint_url != null ? "--endpoint-url ${local.shell_q[a.endpoint_url]} " : ""}${a.region != null ? "--region ${local.shell_q[a.region]} " : ""}${local.shell_q[a.source]} ${local.shell_q[a.destination]}"
         ] : startswith(a.source, "gs://") ? [
-        "gcloud storage cp \"${a.source}\" \"${a.destination}\""
+        "gcloud storage cp ${local.shell_q[a.source]} ${local.shell_q[a.destination]}"
         ] : startswith(a.source, "azblob://") ? [
-        "az storage blob download --auth-mode login --account-name \"${local.azblob_parts_by_source[a.source][0]}\" --container-name \"${local.azblob_parts_by_source[a.source][1]}\" --name \"${local.azblob_parts_by_source[a.source][2]}\" --file \"${a.destination}\""
+        "az storage blob download --auth-mode login --account-name ${local.shell_q[local.azblob_parts_by_source[a.source][0]]} --container-name ${local.shell_q[local.azblob_parts_by_source[a.source][1]]} --name ${local.shell_q[local.azblob_parts_by_source[a.source][2]]} --file ${local.shell_q[a.destination]}"
         ] : [
-        "curl -fsSL -o \"${a.destination}\" \"${a.source}\""
+        "curl -fsSL -o ${local.shell_q[a.destination]} ${local.shell_q[a.source]}"
       ],
-      a.sha256 != null ? ["echo \"${a.sha256}  ${a.destination}\" | sha256sum -c -"] : [],
-      a.owner != null ? ["chown ${a.owner} \"${a.destination}\""] : [],
-      a.permissions != null ? ["chmod ${a.permissions} \"${a.destination}\""] : [],
+      a.sha256 != null ? ["printf '%s  %s\\n' ${local.shell_q[a.sha256]} ${local.shell_q[a.destination]} | sha256sum -c -"] : [],
+      a.owner != null ? ["chown ${local.shell_q[a.owner]} ${local.shell_q[a.destination]}"] : [],
+      a.permissions != null ? ["chmod ${local.shell_q[a.permissions]} ${local.shell_q[a.destination]}"] : [],
       a.extract ? [
-        "EXTRACT_DIR=\"${a.extract_to != null ? a.extract_to : "$(dirname \"${a.destination}\")"}\"",
+        "EXTRACT_DIR=${a.extract_to != null ? local.shell_q[a.extract_to] : "$(dirname ${local.shell_q[a.destination]})"}",
         "mkdir -p \"$EXTRACT_DIR\"",
-        "tar -xzf \"${a.destination}\" -C \"$EXTRACT_DIR\"",
+        "tar -xzf ${local.shell_q[a.destination]} -C \"$EXTRACT_DIR\"",
       ] : [],
     )
   ])
@@ -75,24 +98,26 @@ locals {
     "fi",
   ]
 
+  # extra_vars/env keys are validated as shell identifiers below; the joined
+  # --extra-vars string is one shell word.
   ansible_playbook_lines = flatten([
     for p in var.ansible_playbooks : [
       join(" ", concat(
         ["ansible-playbook"],
-        ["-i", "\"${p.inventory}\""],
-        ["-c", p.connection],
+        ["-i", local.shell_q[p.inventory]],
+        ["-c", local.shell_q[p.connection]],
         p.become ? ["-b"] : [],
-        length(p.tags) > 0 ? ["--tags", "\"${join(",", p.tags)}\""] : [],
-        length(p.extra_vars) > 0 ? ["--extra-vars", "\"${join(" ", [for k, v in p.extra_vars : "${k}=${v}"])}\""] : [],
-        ["\"${p.path}\""],
+        length(p.tags) > 0 ? ["--tags", local.shell_q[join(",", p.tags)]] : [],
+        length(p.extra_vars) > 0 ? ["--extra-vars", local.shell_q[join(" ", [for k, v in p.extra_vars : "${k}=${v}"])]] : [],
+        [local.shell_q[p.path]],
       ))
     ]
   ])
 
   execution_step_lines = flatten([
     for s in var.execution_steps : concat(
-      s.cwd != null ? ["cd \"${s.cwd}\""] : [],
-      [join(" ", concat([for k, v in s.env : "${k}=\"${v}\""], [s.command]))],
+      s.cwd != null ? ["cd ${local.shell_q[s.cwd]}"] : [],
+      [join(" ", concat([for k, v in s.env : "${k}=${local.shell_q[v]}"], [s.command]))],
     )
   ])
 

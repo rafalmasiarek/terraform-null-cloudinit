@@ -98,9 +98,9 @@ variable "groups" {
 }
 
 variable "ssh_authorized_keys" {
-  description = "Maps to the top-level ssh_authorized_keys key (map of username to list of keys) - distinct from a users[] entry's own ssh_authorized_keys field. Use this for adding keys to a user this module isn't also creating (e.g. the AMI's default user)."
-  type        = map(list(string))
-  default     = {}
+  description = "Top-level ssh_authorized_keys - a list of public keys."
+  type        = list(string)
+  default     = []
 }
 
 # --- Files ---
@@ -359,6 +359,23 @@ variable "artifacts" {
     extract_to   = optional(string)
   }))
   default = []
+
+  validation {
+    condition     = alltrue([for a in var.artifacts : a.owner == null || can(regex("^[a-zA-Z0-9._-]+(:[a-zA-Z0-9._-]+)?$", a.owner))])
+    error_message = "owner must be a POSIX user[:group] name ([a-zA-Z0-9._-]+(:[a-zA-Z0-9._-]+)?)."
+  }
+  validation {
+    condition     = alltrue([for a in var.artifacts : a.permissions == null || can(regex("^[0-7]{3,4}$", a.permissions))])
+    error_message = "permissions must be an octal mode, e.g. 0644."
+  }
+  validation {
+    condition     = alltrue([for a in var.artifacts : a.sha256 == null || can(regex("^[a-f0-9]{64}$", a.sha256))])
+    error_message = "sha256 must be a 64-char lowercase hex digest."
+  }
+  validation {
+    condition     = alltrue([for a in var.artifacts : a.region == null || can(regex("^[a-z0-9-]+$", a.region))])
+    error_message = "region must match [a-z0-9-]+."
+  }
 }
 
 # --- Ansible playbooks already on disk (local write_files or artifacts-downloaded) ---
@@ -377,6 +394,19 @@ variable "ansible_playbooks" {
     become     = optional(bool, true)
   }))
   default = []
+
+  validation {
+    condition     = alltrue([for p in var.ansible_playbooks : trimspace(p.connection) != "" && !can(regex("[\\x00-\\x1f]", p.connection))])
+    error_message = "connection must be non-empty and contain no control characters."
+  }
+  validation {
+    condition     = alltrue([for p in var.ansible_playbooks : alltrue([for t in p.tags : can(regex("^[A-Za-z0-9_-]+$", t))])])
+    error_message = "tags must match [A-Za-z0-9_-]+."
+  }
+  validation {
+    condition     = alltrue([for p in var.ansible_playbooks : alltrue([for k in keys(p.extra_vars) : can(regex("^[A-Za-z_][A-Za-z0-9_]*$", k))])])
+    error_message = "extra_vars keys must be shell variable names ([A-Za-z_][A-Za-z0-9_]*)."
+  }
 }
 
 variable "ansible_core_install" {
@@ -393,4 +423,9 @@ variable "execution_steps" {
     env     = optional(map(string), {})
   }))
   default = []
+
+  validation {
+    condition     = alltrue([for s in var.execution_steps : alltrue([for k in keys(s.env) : can(regex("^[A-Za-z_][A-Za-z0-9_]*$", k))])])
+    error_message = "env keys must be shell variable names ([A-Za-z_][A-Za-z0-9_]*); command is trusted shell source and is not quoted."
+  }
 }
