@@ -226,11 +226,21 @@ variable "boot_commands" {
 variable "hostname" {
   type    = string
   default = null
+
+  validation {
+    condition     = var.hostname == null || provider::netutils::hostname_validate(var.hostname)
+    error_message = "hostname must be a valid hostname (RFC 1123 labels, max 253 characters)."
+  }
 }
 
 variable "fqdn" {
   type    = string
   default = null
+
+  validation {
+    condition     = var.fqdn == null || provider::netutils::fqdn_validate(var.fqdn)
+    error_message = "fqdn must be a valid fully-qualified domain name (RFC 1123 labels, max 253 characters)."
+  }
 }
 
 variable "preserve_hostname" {
