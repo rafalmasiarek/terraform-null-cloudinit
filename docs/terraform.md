@@ -1,4 +1,5 @@
-<!-- BEGIN_TF_DOCS -->
+## Terraform Reference
+
 
 
 ### Requirements
@@ -77,4 +78,3 @@ No modules.
 | <a name="output_rendered"></a> [rendered](#output\_rendered) | Base64-encoded multipart MIME cloud-init payload, ready for a user\_data (or cloud-provider equivalent) argument. Null if there's nothing to render. |
 | <a name="output_required_permissions"></a> [required\_permissions](#output\_required\_permissions) | Per-provider permission requirements for whatever artifacts[] sources are configured, keyed by provider - each null if that provider's scheme isn't used. This module never creates or attaches any of these; wire them into whatever identity the compute actually runs as (AWS IAM role, GCP service account, Azure Managed Identity). |
 | <a name="output_secrets_service"></a> [secrets\_service](#output\_secrets\_service) | Name of the generated oneshot service that materializes secrets[] at boot - order consumers with After=/Requires=. Null if secrets is empty. |
-<!-- END_TF_DOCS -->

@@ -5,28 +5,6 @@ Renders a multipart MIME cloud-init payload (via the `hashicorp/cloudinit` provi
 
 
 
-## License
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-```text
-The MIT License (MIT)
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files, to deal in the Software
-without restriction.
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
-
-Source: https://opensource.org/licenses/MIT
-```
-See [LICENSE](LICENSE) for full details.
-## Authors
-
-- Rafał Masiarek | [website](https://masiarek.pl) | [email](mailto:rafal@masiarek.pl) | [github](https://github.com/rafalmasiarek)
-
 
 ## Naming convention
 
@@ -357,7 +335,8 @@ resource "aws_launch_template" "this" {
 `rendered` is already base64-encoded (the provider's own `base64_encode = true`) - pass it straight into `user_data_base64`-style arguments; don't `base64encode()` it again. This module doesn't create the launch template, ASG, or instance itself - see `terraform-aws-ec2-autoscale-group` for that, which accepts this module's `cloudinit_parts`-shaped list directly and renders the same way internally.
 
 
-<!-- BEGIN_TF_DOCS -->
+## Terraform Reference
+
 
 
 ### Requirements
@@ -436,7 +415,31 @@ No modules.
 | <a name="output_rendered"></a> [rendered](#output\_rendered) | Base64-encoded multipart MIME cloud-init payload, ready for a user\_data (or cloud-provider equivalent) argument. Null if there's nothing to render. |
 | <a name="output_required_permissions"></a> [required\_permissions](#output\_required\_permissions) | Per-provider permission requirements for whatever artifacts[] sources are configured, keyed by provider - each null if that provider's scheme isn't used. This module never creates or attaches any of these; wire them into whatever identity the compute actually runs as (AWS IAM role, GCP service account, Azure Managed Identity). |
 | <a name="output_secrets_service"></a> [secrets\_service](#output\_secrets\_service) | Name of the generated oneshot service that materializes secrets[] at boot - order consumers with After=/Requires=. Null if secrets is empty. |
-<!-- END_TF_DOCS -->
+
+## License
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+```text
+The MIT License (MIT)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files, to deal in the Software
+without restriction.
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
+
+Source: https://opensource.org/licenses/MIT
+```
+
+
+See [LICENSE](LICENSE) for full details.
+## Authors
+
+- Rafał Masiarek | [website](https://masiarek.pl) | [email](mailto:rafal@masiarek.pl) | [github](https://github.com/rafalmasiarek)
 
 
 <!-- references -->
