@@ -27,6 +27,7 @@ jobs:
           config-file: .terraform-docs.yml
           output-file: docs/terraform.md
           output-method: replace
+          template: ""
 
       - name: Fix workspace ownership
         run: sudo chown -R "$(id -u):$(id -g)" .
