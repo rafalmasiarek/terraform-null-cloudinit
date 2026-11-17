@@ -14,6 +14,8 @@ sections:
   show: []
 
 content: |-
+  ## Terraform Reference
+
   {{ .Header }}
 
   {{ .Requirements }}
@@ -28,14 +30,9 @@ content: |-
 
 output:
   file: ""
-  mode: inject
+  mode: replace
   template: |-
-    <!-- BEGIN_TF_DOCS -->
-    ## Documentation
     {{ .Content }}
-
-    <!-- END_TF_DOCS -->
-
 
 output-values:
   enabled: false
