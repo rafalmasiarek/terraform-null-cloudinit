@@ -28,6 +28,9 @@ jobs:
           output-file: docs/terraform.md
           output-method: replace
 
+      - name: Fix workspace ownership
+        run: sudo chown -R "$(id -u):$(id -g)" .
+
       - name: Generate README
         uses: rafalmasiarek/readme-gen@latest
         with:
