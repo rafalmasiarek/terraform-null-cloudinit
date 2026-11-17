@@ -1,0 +1,18 @@
+name: terraform-null-cloudinit
+repo_url: https://github.com/rafalmasiarek/terraform-null-cloudinit
+license: MIT
+
+context:
+  - "## About"
+  - |
+    Renders a multipart MIME cloud-init payload (via the `hashicorp/cloudinit` provider) for a `user_data`-style argument - AWS EC2, GCP, Azure, Hetzner, or anywhere else cloud-init runs. Typed helper variables map to native cloud-init cloud-config modules (packages, users, files, mounts, ssh, ansible, ...); `cloud_config` is the escape hatch for anything not covered. The `null` in the name follows the same convention as `terraform-null-tagger`/cloudposse's `terraform-null-label` - this module creates no real infrastructure, only renders a string. It never creates a compute instance, IAM role/service account, or storage bucket on any provider.
+
+includes:
+  - docs/usage.md
+  - docs/terraform.md
+
+authors:
+  - name: Rafał Masiarek
+    email: rafal@masiarek.pl
+    github: rafalmasiarek
+    website: https://masiarek.pl

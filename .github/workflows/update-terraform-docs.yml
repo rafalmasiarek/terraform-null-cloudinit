@@ -1,0 +1,50 @@
+name: "update-terraform-docs"
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**.tf"
+      - "README.yml"
+      - ".terraform-docs.yml"
+  schedule:
+    - cron: "0 2 1 * *"
+  workflow_dispatch:
+
+jobs:
+  update-docs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install terraform-docs
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -sSL https://github.com/terraform-docs/terraform-docs/releases/download/v0.25.1/terraform-docs-v0.25.1-linux-amd64.tar.gz -o /tmp/terraform-docs.tar.gz
+          tar -xzf /tmp/terraform-docs.tar.gz -C /tmp
+          chmod +x /tmp/terraform-docs
+          echo "/tmp" >> "$GITHUB_PATH"
+
+      - name: Generate Terraform docs
+        run: terraform-docs markdown table --config .terraform-docs.yml --output-mode replace --output-file docs/terraform.md .
+
+      - name: Generate README
+        uses: rafalmasiarek/readme-gen@latest
+        with:
+          config: README.yml
+          output: README.md
+          version: latest
+
+      - name: Git Auto-Commit
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "docs: auto-update README.md and docs/terraform.md [skip ci]"
+          commit_options: "--no-verify --signoff"
+          commit_user_name: "github-actions[bot]"
+          commit_user_email: "41898282+github-actions[bot]@users.noreply.github.com"
+          commit_author: "github-actions[bot] <actions@github.com>"
+          file_pattern: "README.md docs/terraform.md"
