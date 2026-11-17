@@ -20,17 +20,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install terraform-docs
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl -sSL https://github.com/terraform-docs/terraform-docs/releases/download/v0.25.1/terraform-docs-v0.25.1-linux-amd64.tar.gz -o /tmp/terraform-docs.tar.gz
-          tar -xzf /tmp/terraform-docs.tar.gz -C /tmp
-          chmod +x /tmp/terraform-docs
-          echo "/tmp" >> "$GITHUB_PATH"
-
       - name: Generate Terraform docs
-        run: terraform-docs markdown table --config .terraform-docs.yml --output-mode replace --output-file docs/terraform.md .
+        uses: terraform-docs/gh-actions@v1.4.1
+        with:
+          working-dir: .
+          config-file: .terraform-docs.yml
+          output-file: docs/terraform.md
+          output-method: replace
 
       - name: Generate README
         uses: rafalmasiarek/readme-gen@latest
