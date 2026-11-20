@@ -21,16 +21,12 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Generate Terraform docs
-        uses: terraform-docs/gh-actions@v1.4.1
+        uses: rafalmasiarek/terraform-docs-action@latest
         with:
           working-dir: .
           config-file: .terraform-docs.yml
           output-file: docs/terraform.md
           output-method: replace
-          template: ""
-
-      - name: Fix workspace ownership
-        run: sudo chown -R "$(id -u):$(id -g)" .
 
       - name: Generate README
         uses: rafalmasiarek/readme-gen@latest
